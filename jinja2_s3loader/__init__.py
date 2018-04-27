@@ -18,8 +18,8 @@ from botocore.exceptions import ClientError
 import boto3
 from gzip import GzipFile
 from io import BytesIO
+import os
 import posixpath as path
-
 
 def gzip(content, filename=None, compresslevel=9):
     gzbuffer = BytesIO()
@@ -36,9 +36,10 @@ def gunzip(gzcontent):
 
 class S3loader(BaseLoader):
 
-    def __init__(self, bucket, prefix='', s3=None):
+    def __init__(self, bucket, prefix='', s3=None, fallback_dir='chalicelib'):
         self.bucket = bucket
         self.prefix = prefix
+        self.fallback_dir = fallback_dir
         self.s3 = s3 or boto3.client('s3')
         super(S3loader, self).__init__()
 
@@ -49,7 +50,12 @@ class S3loader(BaseLoader):
             resp = self.s3.get_object(Bucket=self.bucket, Key=template)
         except ClientError as e:
             if "NoSuchKey" in e.__str__():
-                raise TemplateNotFound(template)
+                #raise TemplateNotFound(template)
+                # try a fallback directory
+                p=os.path.join(self.fallback_dir, template)
+                with open(p, 'r') as myfile:
+                    resp = myfile.read()
+                return (resp, None, lambda: True)
             else:
                 raise e
         if 'ContentEncoding' in resp and 'gzip' in resp['ContentEncoding']:
